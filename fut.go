@@ -2,7 +2,8 @@ package fut
 
 import "context"
 
-// Do _not_ use the last two return variables until channel closed
+// Do _not_ use the last two return variables until channel closed. Pointers are
+// guaranteed never nil (though they may point to a nil value)
 type Fut[Out any] func(context.Context) (<-chan struct{}, *Out, *error)
 
 type PanicHandler func(interface{}) error

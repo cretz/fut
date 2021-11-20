@@ -47,11 +47,8 @@ func New[Out any, C CallOut[Out]](c C) Fut[Out] {
 			case <-ctx.Done():
 				err = ctx.Err()
 			case <-localDone:
-				if localErr != nil {
-					err = localErr
-				} else {
-					out = localOut
-				}
+				out = localOut
+				err = localErr
 			}
 		})
 		return doneCh, &out, &err
@@ -84,15 +81,24 @@ var alwaysDone = make(chan struct{})
 
 func init() { close(alwaysDone) }
 
+var alwaysNilError error = nil
+
 func Fixed[Out any](v Out) Fut[Out] {
 	return func(context.Context) (<-chan struct{}, *Out, *error) {
-		return alwaysDone, &v, nil
+		return alwaysDone, &v, &alwaysNilError
+	}
+}
+
+func Result[Out any](v Out, err error) Fut[Out] {
+	return func(context.Context) (<-chan struct{}, *Out, *error) {
+		return alwaysDone, &v, &err
 	}
 }
 
 func Err[Out any](err error) Fut[Out] {
+	var out Out
 	return func(context.Context) (<-chan struct{}, *Out, *error) {
-		return alwaysDone, nil, &err
+		return alwaysDone, &out, &err
 	}
 }
 
@@ -157,6 +163,7 @@ func ThenErrFut[In any, C CallInOut[error, Fut[In]]](f Fut[In], c C) Fut[In] {
 // Does run on panic, error is ignored
 func Defer[In any, C Call](f Fut[In], c C) Fut[In] {
 	return New(func(ctx context.Context) (in In, err error) {
+		// TODO(cretz): Not cool that this takes an error result but doesn't use it
 		defer c(ctx)
 		// TODO(cretz): If this is just "return Wait" an ICE occurs
 		in, err = Wait(ctx, f)
@@ -192,6 +199,25 @@ func DeferErr[In any, C CallIn[error]](f Fut[In], c C) Fut[In] {
 	})
 }
 
+type recoveredErr struct{ value interface{} }
+
+func (*recoveredErr) Error() string { panic("unreachable") }
+
+// Overrides panic handler
+func DeferRecover[Out any, C CallInOut[interface{}, Out]](f Fut[Out], c C) Fut[Out] {
+	return New(func(ctx context.Context) (Out, error) {
+		// Install panic handler
+		ctx = context.WithValue(ctx, PanicHandlerKey, PanicHandler(func(value interface{}) error {
+			return &recoveredErr{value}
+		}))
+		out, err := Wait(ctx, f)
+		if rec, _ := err.(*recoveredErr); rec != nil {
+			out, err = InvokeCallInOut[interface{}, Out](ctx, c, rec.value)
+		}
+		return out, err
+	})
+}
+
 func WithContext[In any](f Fut[In], ctx context.Context) Fut[In] {
 	return New(func(context.Context) (in In, err error) {
 		in, err = Wait(ctx, f)
@@ -203,9 +229,10 @@ func WithContext[In any](f Fut[In], ctx context.Context) Fut[In] {
 //
 // TODO(cretz): Wait for https://github.com/golang/go/issues/36503 or do
 // something like https://github.com/monogon-dev/monogon/blob/main/metropolis/pkg/combinectx/combinectx.go
-func WithMergedContext[In any](v Fut[In], ctx context.Context) Fut[In] {
-	panic("Not implemented")
-}
+//
+// func WithMergedContext[In any](v Fut[In], ctx context.Context) Fut[In] {
+// 	panic("Not implemented")
+// }
 
 // This starts execution
 func Recv[Out any](ctx context.Context, f Fut[Out]) (<-chan Out, <-chan error) {
@@ -296,11 +323,63 @@ func WaitAll[Out any](ctx context.Context, f ...Fut[Out]) ([]Out, []error) {
 	panic("TODO")
 }
 
-func First[Out any](ctx context.Context, f ...Fut[Out]) (Out, error) {
+func WaitChan[Out any](ctx context.Context, f Fut[Out]) (<-chan Out, <-chan error) {
 	panic("TODO")
 }
 
-func Completable[Out any](ctx context.Context, outCh chan<- Out, errCh chan<- error) Fut[Out] {
+func WaitEachChan[Out any](ctx context.Context, outCh chan<- Out, errCh chan<- error, f ...Fut[Out]) {
+	panic("TODO")
+}
+
+// First completed, success or error
+func First[Out any](f ...Fut[Out]) Fut[Out] {
+	panic("TODO")
+}
+
+func Either[OutA, OutB any](fA Fut[OutA], fB Fut[OutB]) Fut[struct {
+	A *OutA
+	B *OutB
+}] {
+	panic("TODO")
+}
+
+func Both[OutA, OutB any](fA Fut[OutA], fB Fut[OutB]) Fut[struct {
+	A OutA
+	B OutB
+}] {
+	panic("TODO")
+}
+
+// First completed success, ignore error
+func FirstOK[Out any](f ...Fut[Out]) Fut[Out] {
+	panic("TODO")
+}
+
+func Flatten[Out any](f Fut[Fut[Out]]) Fut[Out] {
+	panic("TODO")
+}
+
+func FlattenAll[Out any](f Fut[[]Fut[Out]]) Fut[[]Out] {
+	panic("TODO")
+}
+
+func Promise[Out any]() (Fut[Out], chan<- Out, chan<- error) {
+	panic("TODO")
+}
+
+func Pending[Out any](outCh <-chan Out, errCh <-chan error) Fut[Out] {
+	panic("TODO")
+}
+
+func WaitPool[Out any](ctx context.Context, max int) func(Fut[Out]) (Out, error) {
+	panic("TODO")
+}
+
+func ChanPool[Out any](ctx context.Context, max int) (func(Fut[Out]), <-chan Out, <-chan error) {
+	panic("TODO")
+}
+
+func Tee[Out any](f Fut[Out]) (Fut[Out], Fut[Out]) {
 	panic("TODO")
 }
 
@@ -308,3 +387,5 @@ func Completable[Out any](ctx context.Context, outCh chan<- Out, errCh chan<- er
 // * Can Fut[struct{}] be embedded in custom to have a state-machine-like setup?
 // * Show how Fut can help make otherwise confusing code appear more imperative
 // * Show how this can easily be used to implement worker pools
+// * Make sure we document at the package level all the calls in a list for easy
+//   reference

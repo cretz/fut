@@ -2,6 +2,7 @@ package fut_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/cretz/fut"
@@ -44,6 +45,12 @@ func ExampleFixed() {
 	f1 := fut.Fixed("Hello, World!")
 	fmt.Println(fut.MustWait(context.TODO(), f1))
 	// Output: Hello, World!
+}
+
+func ExampleResult() {
+	f1 := fut.Result(json.Marshal("Hello, World!"))
+	fmt.Println(string(fut.MustWait(context.TODO(), f1)))
+	// Output: "Hello, World!"
 }
 
 func ExampleErr() {
@@ -120,11 +127,23 @@ func ExampleDeferOK() {
 func ExampleDeferErr() {
 	f1 := fut.Err[struct{}](fmt.Errorf("Hello"))
 	f1 = fut.DeferErr(f1, func(_ context.Context, in error) error {
-		fmt.Println(in.Error() + ", World!")
+		fmt.Println(in.Error() + ", Err!")
 		return nil
 	})
 	fut.Wait(context.TODO(), f1)
-	// Output: Hello, World!
+	// Output: Hello, Err!
+}
+
+func ExampleDeferRecover() {
+	f1 := fut.New(func(context.Context) (string, error) {
+		panic("Hello, Panic!")
+	})
+	f1 = fut.DeferRecover(f1, func(_ context.Context, v interface{}) (string, error) {
+		return v.(string), nil
+	})
+	out, _ := fut.Wait(context.TODO(), f1)
+	fmt.Println(out)
+	// Output: Hello, Panic!
 }
 
 func ExampleWithContext() {
